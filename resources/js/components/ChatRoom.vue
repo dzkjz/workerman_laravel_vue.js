@@ -1,0 +1,165 @@
+<template>
+    <div class="container">
+        <a href="?room_id=1" class="btn btn-danger">吃货人生</a>
+        <a href="?room_id=2" class="btn btn-primary">技术探讨</a>
+        <hr class="divider"/>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="panel panel-default">
+                    <div class="panel-heading">聊天室</div>
+                    <div class="panel-body">
+                        <div class="messages">
+                            <div class="media" v-for="message in messages">
+                                <div class="media-left">
+                                    <a href="#">
+                                        <img
+                                            class="media-object img-circle"
+                                            :src="message.avatar"
+                                        />
+                                    </a>
+                                </div>
+                                <div class="media-body">
+                                    <p class="time">{{ message.time }}</p>
+                                    <h4 class="media-heading">
+                                        {{ message.name }}
+                                    </h4>
+                                    {{ message.content }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="panel panel-default">
+                    <div class="panel-heading">在线用户</div>
+
+                    <div class="panel-body">
+                        <ul class="list-group">
+                            <li class="list-group-item" v-for="user in users">
+                                <img :src="user.avatar" class="img-circle"/>
+                                {{ user.name }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <form @submit.prevent="onSubmit">
+            <div class="form-group">
+                <label for="user_id">私聊</label>
+
+                <select class="form-control" id="user_id" v-model="user_id">
+                    <option>所有人</option>
+                    <option v-for="user in users">{{ user.name }}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="content">内容</label>
+                <textarea
+                    class="form-control"
+                    rows="3"
+                    id="content"
+                    v-model="content"
+                ></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-default">提交</button>
+        </form>
+    </div>
+</template>
+
+<script>
+    let ws = new WebSocket("ws://127.0.0.1:7272");
+    export default {
+        data() {
+            return {
+                messages: [],
+                content: "",
+                users: [],
+                user_id: ""
+            };
+        },
+        created: function () {
+            let currentObj = this;
+            ws.onmessage = function (e) {
+                let data = JSON.parse(e.data);
+                //如果data.type不存在则赋值空
+                let type = data.type || "";
+                switch (type) {
+                    case "init":
+                        axios.post("/init", {client_id: data.client_id});
+                        break;
+                    case "say":
+                        currentObj.messages.push(data.data);
+                        //当vue把dom更新完毕后执行
+                        currentObj.$nextTick(function () {
+                            //滚动
+                            $(".panel-body").animate({
+                                scrollTop: $(".messages").height()
+                            });
+                        });
+                        break;
+                    case "history":
+                        currentObj.messages = data.data.slice().reverse();
+                        currentObj.$nextTick(function () {
+                            //滚动
+                            $(".panel-body").animate({
+                                scrollTop: $(".messages").height()
+                            });
+                        });
+                        break;
+                    case "users":
+                        currentObj.users = data.data;
+                        break;
+                    case "logout":
+                        currentObj.$delete(currentObj.users, data.client_id);
+                        break;
+                    case "ping":
+                        ws.send('pong');
+                        break;
+                    default:
+                        console.log(data);
+                }
+            };
+        },
+        methods: {
+            onSubmit: function () {
+                axios.post("/say", {
+                    content: this.content,
+                    user_id: this.user_id
+                });
+                this.content = "";
+            }
+        }
+    };
+</script>
+
+<style scoped>
+    .panel-body {
+        height: 480px;
+        overflow: auto;
+    }
+
+    .media-object.img-circle {
+        width: 64px;
+        height: 64px;
+    }
+
+    .img-circle {
+        width: 48px;
+        height: 48px;
+    }
+
+    .time {
+        float: right;
+    }
+
+    .media {
+        margin-top: 24px;
+    }
+</style>
